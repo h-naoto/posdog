@@ -31,7 +31,7 @@ def main():
     elif task == "create":
         res = cl.create_posdog_environment()
         if res is False:
-            print "container or bridge configuration is present."
+            print "container or bridge configuration or share directory is present."
             print "execute [python posdog.py -t destroy] command."
     elif task == "destroy":
         cl.destroy_posdog_environment()

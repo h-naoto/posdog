@@ -1,4 +1,5 @@
 import os
+import time
 from fabric.api import local
 
 BRIDGE = {"name": "br0", "addr": "10.0.10.254", "mask": "/24"}
@@ -10,7 +11,8 @@ SHEEP3 = {"name": "sheepdog3", "addr": "10.0.10.13", "image": "nhanaue/sheepdog"
 POS = [POS1, POS2]
 SHEEP = [SHEEP1, SHEEP2, SHEEP3]
 
-SHARE_DIR = "/tmp/posdog"
+VDI = {"name": "vdipos", "size": "10G"}
+SHARE_SHEEP_DIR = "/var/lib/sheepdog"
 
 
 def check_user():
@@ -108,21 +110,109 @@ def get_container():
 
 
 def run_container(instans):
-    image_name = "nhanaue/%s" % instans["name"]
+    # image_name = "nhanaue/%s" % instans["name"]
     # cmd = "docker run --privileged=true -v %s:/root/share_volume --name %s -id %s" % (SHARE_DIR, name, image_name)
-    cmd = "docker run --privileged=true --name %s -id %s" % (instans["name"], instans["image"])
+    if "sheepdog" in instans["name"]:
+        cmd = "docker run --privileged=true --name %s -v %s:%s -id %s" \
+            % (instans["name"], SHARE_SHEEP_DIR, SHARE_SHEEP_DIR, instans["image"])
+    else:
+        cmd = "docker run --privileged=true --name %s -id %s" % (instans["name"], instans["image"])
+
     local(cmd, capture=True)
     set_ipaddr(instans["name"], instans["addr"])
-    
+
 
 def stop_container(name):
     cmd = "docker rm -f " + name
     local(cmd, capture=True)
 
 
+def check_share_dir():
+    dir_exists = False
+    for sheep in SHEEP:
+        dir = "%s/%s" % (SHARE_SHEEP_DIR, sheep["name"])
+        if os.path.exists(dir):
+            dir_exists = True
+            return dir_exists
+    return dir_exists
+
+
+def make_share_dir():
+    for sheep in SHEEP:
+        cmd = "mkdir %s/%s" % (SHARE_SHEEP_DIR, sheep["name"])
+        local(cmd, capture=True)
+
+
+def delete_share_dir():
+    cmd = "rm -rf %s/*" % SHARE_SHEEP_DIR
+    local(cmd, capture=True)
+
+
+def start_sheep_cluster():
+    # start corosync service in each sheepdog containers
+    print "start corosync service in each sheepdog containers"
+    for sheep in SHEEP:
+        e_command = "service corosync start"
+        cmd = "docker exec %s %s" % (sheep["name"], e_command)
+        local(cmd, capture=True)
+    print "wait corosync ..."
+    time.sleep(3)
+
+    # start sheepdog service in each sheepdog containers
+    print "start sheepdog service in each sheepdog containers"
+    for sheep in SHEEP:
+        e_command = "sheep -b %s -p 7000 -y %s -i host=%s,port=7001 -c corosync /var/lib/sheepdog/%s"\
+                    % (sheep["addr"], sheep["addr"], sheep["addr"], sheep["name"])
+        cmd = "docker exec %s %s" % (sheep["name"], e_command)
+        local(cmd, capture=True)
+    print "wait sheepdog ..."
+    time.sleep(3)
+
+    sheep_head = SHEEP[0]
+
+    # start tgtd service in sheepdog head
+    print "start tgtd service in sheepdog head"
+    e_command = "service tgtd start"
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+    print "wait tgtd ..."
+    time.sleep(3)
+
+    # execute cluster format in sheepdog cluster
+    print "execute cluster format in sheepdog cluster"
+    e_command = "dog cluster format --copies=3 -a %s" % (sheep_head["addr"])
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+
+    # create vdi
+    print "create vdi"
+    e_command = "dog vdi create %s %s -a %s" % (VDI["name"], VDI["size"], sheep_head["addr"])
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+
+    # setting target
+    print "setting target"
+    e_command = "tgtadm --lld iscsi --mode=target --op new --tid=1 --targetname jp.co.strage.%s" % (VDI["name"])
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+
+    # setting logicalunit
+    print "setting target"
+    e_command = "tgtadm --mode logicalunit --op new --tid=1 --lun=1 --bstype sheepdog" \
+                " --backing-store unix:/var/lib/sheepdog/%s/sock:%s" % (sheep_head["name"], VDI["name"])
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+
+    # bind target
+    print "bind target"
+    e_command = "tgtadm --mode target --op bind --tid=1 --initiator-address ALL"
+    cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
+    local(cmd, capture=True)
+
+
 def check_posdog_environment():
     env_exists = False
-    if check_bridge() or check_container():
+    if check_bridge() or check_container() or check_share_dir():
         env_exists = True
     return env_exists
 
@@ -132,7 +222,8 @@ def create_posdog_environment():
     # initial environment for postgres and sheepdog
     if check_posdog_environment():
         return False
-
+    # create share directory
+    make_share_dir()
     # create bridge
     create_bridge()
     # run sheepdog on docker container
@@ -141,6 +232,9 @@ def create_posdog_environment():
     # run postgres on docker container
     postgres = POS[0]
     run_container(postgres)
+
+    # start sheepdog cluster
+    start_sheep_cluster()
 
     return True
 
@@ -156,4 +250,5 @@ def destroy_posdog_environment():
             if sheep["name"] == container_name:
                 stop_container(container_name)
     destroy_bridge()
+    delete_share_dir()
 
