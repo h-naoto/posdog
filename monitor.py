@@ -4,12 +4,12 @@ import controller as co
 from fabric.api import local
 
 
-def check_monitor_environment():
+def check_container_environment(instance):
     outbuf = local("docker ps -a", capture=True)
     docker_ps = outbuf.split('\n')
     for container in docker_ps:
         container_name = container.split()[-1]
-        if co.POS2["name"] == container_name:
+        if instance["name"] == container_name:
             r_container = (True, "monitor container is already exists.")
             return r_container
     r_container = (False, "")
@@ -35,21 +35,50 @@ def check_posdog_environment():
     return r_check
 
 
+# restart postgres
+def restart_postgres():
+    r_check_p = check_container_environment(co.POS1)
+    if r_check_p[0]:
+        # stop postgres docker container
+        co.stop_container(co.POS1["name"])
+    # run postgres docker container
+    postgres = co.POS[0]
+    co.run_container(postgres)
+    # start postgres service
+    co.make_pg_startup_file()
+    co.start_postgres()
+
+
+def monitor_postgres():
+    while True:
+        cmd = "echo `ps ax | grep postgres: | grep -v grep`"
+        pg_state = local(cmd, capture=True)
+        if "postgres" not in pg_state:
+            print "postgres process is dead"
+            restart_postgres()
+        else:
+            print "postgres process is alive"
+        time.sleep(co.WAIT_TIME)
+
+
 def create_monitoring_environment():
     # initial environment for postgres and sheepdog
 
     r_check_p = check_posdog_environment()
-    print "after check3" + str(r_check_p[0])
     if r_check_p[0]:
         return r_check_p
-    r_check_m = check_monitor_environment()
+    r_check_m = check_container_environment(co.POS2)
     if r_check_m[0]:
-        return r_check_m
+        # stop postgres docker container
+        print r_check_m[1]
+        co.stop_container(co.POS2["name"])
 
     # run monitor container
     monitor = co.POS2
     print "start monitor container"
     co.run_container(monitor)
+
+    monitor_postgres()
 
     r_monitor = (False, "")
     return r_monitor
