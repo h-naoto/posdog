@@ -29,10 +29,11 @@ def main():
     if task == "install":
         cl.install_docker_and_tools()
     elif task == "create":
-        res = cl.create_posdog_environment()
-        if res is False:
-            print "container or bridge configuration or share directory is present."
+        r_create = cl.create_posdog_environment()
+        if r_create[0] is False:
+            print r_create[1]
             print "execute [python posdog.py -t destroy] command."
+
     elif task == "destroy":
         cl.destroy_posdog_environment()
     else:

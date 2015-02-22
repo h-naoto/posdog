@@ -13,6 +13,9 @@ SHEEP = [SHEEP1, SHEEP2, SHEEP3]
 
 VDI = {"name": "vdipos", "size": "10G"}
 SHARE_SHEEP_DIR = "/var/lib/sheepdog"
+SHARE_POS_DIR = "/mnt/postgres"
+PG_STARTUP_FILE = "pg_startup.sh"
+WAIT_TIME = 3
 
 
 def check_user():
@@ -42,6 +45,7 @@ def install_docker_and_tools():
     local("apt-get install -y --force-yes iputils-arping", capture=True)
     local("apt-get install -y --force-yes bridge-utils", capture=True)
     local("apt-get install -y --force-yes lv", capture=True)
+    local("apt-get install -y --force-yes open-iscsi", capture=True)
     local("wget https://raw.github.com/jpetazzo/pipework/master/pipework -O /usr/local/bin/pipework",
           capture=True)
     local("chmod 755 /usr/local/bin/pipework", capture=True)
@@ -51,12 +55,12 @@ def install_docker_and_tools():
 
 
 def check_bridge():
-    setting_exists = False
     sysfs_name = "/sys/class/net/" + BRIDGE["name"]
     if os.path.exists(sysfs_name):
-        setting_exists = True
-        return setting_exists
-    return setting_exists
+        r_bridge = (False, "ERROR: bridge is already settings.")
+        return r_bridge
+    r_bridge = (True, "")
+    return r_bridge
 
 
 def create_bridge():
@@ -84,18 +88,20 @@ def set_ipaddr(name, addr):
 
 
 def check_container():
-    container_exists = False
     outbuf = local("docker ps -a", capture=True)
     docker_ps = outbuf.split('\n')
     for container in docker_ps:
         container_name = container.split()[-1]
         for pos in POS:
             if pos["name"] == container_name:
-                container_exists = True
+                r_container = (False, "ERROR: posgres container is already exists.")
+                return r_container
         for sheep in SHEEP:
             if sheep["name"] == container_name:
-                container_exists = True
-    return container_exists
+                r_container = (False, "ERROR: sheepdog container is already exists.")
+                return r_container
+    r_container = (True, None)
+    return r_container
 
 
 def get_container():
@@ -110,13 +116,12 @@ def get_container():
 
 
 def run_container(instans):
-    # image_name = "nhanaue/%s" % instans["name"]
-    # cmd = "docker run --privileged=true -v %s:/root/share_volume --name %s -id %s" % (SHARE_DIR, name, image_name)
     if "sheepdog" in instans["name"]:
         cmd = "docker run --privileged=true --name %s -v %s:%s -id %s" \
             % (instans["name"], SHARE_SHEEP_DIR, SHARE_SHEEP_DIR, instans["image"])
     else:
-        cmd = "docker run --privileged=true --name %s -id %s" % (instans["name"], instans["image"])
+        cmd = "docker run --privileged=true --name %s -v %s:%s -id %s"\
+              % (instans["name"], SHARE_POS_DIR, SHARE_POS_DIR, instans["image"])
 
     local(cmd, capture=True)
     set_ipaddr(instans["name"], instans["addr"])
@@ -128,13 +133,16 @@ def stop_container(name):
 
 
 def check_share_dir():
-    dir_exists = False
     for sheep in SHEEP:
         dir = "%s/%s" % (SHARE_SHEEP_DIR, sheep["name"])
         if os.path.exists(dir):
-            dir_exists = True
-            return dir_exists
-    return dir_exists
+            r_dir = (False, "ERROR: shared sheepdog dir is already exists")
+            return r_dir
+    if os.path.exists(SHARE_POS_DIR):
+        r_dir = (False, "ERROR: shared postgres dir is already exists")
+        return r_dir
+    r_dir = (True, "")
+    return r_dir
 
 
 def make_share_dir():
@@ -143,8 +151,103 @@ def make_share_dir():
         local(cmd, capture=True)
 
 
+def make_mnt_dir_for_postgres():
+    cmd = "mkdir %s" % SHARE_POS_DIR
+    local(cmd, capture=True)
+
+
 def delete_share_dir():
     cmd = "rm -rf %s/*" % SHARE_SHEEP_DIR
+    local(cmd, capture=True)
+    cmd = "rm -rf %s" % SHARE_POS_DIR
+    local(cmd, capture=True)
+
+
+def check_iscsi_session():
+    target_vdi = "jp.co.strage.%s" % VDI["name"]
+    cmd = 'echo `iscsiadm -m session --show`'
+    sessions = local(cmd, capture=True)
+
+    if target_vdi in sessions:
+        connected = (False, "Error iscsi sessions this already connected.")
+        return connected
+    connected = (True, "")
+    return connected
+
+
+def connect_iscsi_session():
+    target_vdi = "jp.co.strage.%s" % VDI["name"]
+    cmd = "iscsiadm -m discovery --type sendtargets -p %s" % SHEEP1["addr"]
+    local(cmd, capture=True)
+    cmd = "iscsiadm -m node -T %s --login" % target_vdi
+    local(cmd, capture=True)
+
+
+def disconnect_iscsi_session():
+    if check_iscsi_session()[0] is False:
+        target_vdi = "jp.co.strage.%s" % VDI["name"]
+        cmd = "iscsiadm -m node -T %s --logout" % target_vdi
+        local(cmd, capture=True)
+
+
+def check_device():
+    # check device
+    loaded_device = False
+    device_dir = "/dev/disk/by-path"
+    if os.path.exists(device_dir):
+        loaded_device = True
+    return loaded_device
+
+
+def make_filesystem():
+    # check file system
+    if check_device() is False:
+        err = "ERROR: not found device [ /dev/disk/by-path/~]"
+        r_make = (False, err)
+        return r_make
+    cmd = "echo `ls -l  /dev/disk/by-path/ip-* | awk -F'/' '{print $NF}'`"
+    device = local(cmd, capture=True)
+    print "making file system please wiat..."
+    cmd = "parted -s -a optimal /dev/%s mklabel gpt -- mkpart primary ext4 1 -1" % str(device)
+    local(cmd, capture=True)
+    target_partision = "%s1" % str(device)
+    cmd = "mkfs.ext4 /dev/%s" % target_partision
+    local(cmd, capture=True)
+    r_make = (True, target_partision)
+    return r_make
+
+
+def mount_dick_on_sheepdog_vdi():
+    connect_iscsi_session()
+    print "wait for iscsi connection"
+    time.sleep(WAIT_TIME)
+    r_make = make_filesystem()
+    if r_make[0] is False:
+        return r_make
+    cmd = "mount /dev/%s %s" % (r_make[1], SHARE_POS_DIR)
+    local(cmd, capture=True)
+    r_mnt = (True, "")
+    return r_mnt
+
+
+def umount_dick_on_sheepdog_vdi():
+    cmd = "echo `df -h`"
+    mnt_dirs = local(cmd, capture=True)
+    if SHARE_POS_DIR in mnt_dirs:
+        cmd = "umount %s" % SHARE_POS_DIR
+        local(cmd, capture=True)
+
+
+def make_pg_startup_file():
+    buffer = '#!/bin/bash' + '\n'
+    buffer += 'mkdir /mnt/postgres/pg_data' + '\n'
+    buffer += 'chown postgres:postgres /mnt/postgres/pg_data' + '\n'
+    buffer += 'su -c "/usr/local/pgsql/bin/initdb -D /mnt/postgres/pg_data  --no-locale" postgres' + '\n'
+    buffer += 'su -c "/usr/local/pgsql/bin/pg_ctl start -D /mnt/postgres/pg_data  -w" postgres' + '\n'
+    buffer += 'exit'
+    cmd = "echo \'%s\' > %s/%s" % (buffer, SHARE_POS_DIR, PG_STARTUP_FILE)
+    local(cmd, capture=True)
+    cmd = "chmod 755 %s/%s" % (SHARE_POS_DIR, PG_STARTUP_FILE)
     local(cmd, capture=True)
 
 
@@ -155,8 +258,8 @@ def start_sheep_cluster():
         e_command = "service corosync start"
         cmd = "docker exec %s %s" % (sheep["name"], e_command)
         local(cmd, capture=True)
-    print "wait corosync ..."
-    time.sleep(3)
+    print "wait for corosync ..."
+    time.sleep(WAIT_TIME)
 
     # start sheepdog service in each sheepdog containers
     print "start sheepdog service in each sheepdog containers"
@@ -165,8 +268,8 @@ def start_sheep_cluster():
                     % (sheep["addr"], sheep["addr"], sheep["addr"], sheep["name"])
         cmd = "docker exec %s %s" % (sheep["name"], e_command)
         local(cmd, capture=True)
-    print "wait sheepdog ..."
-    time.sleep(3)
+    print "wait for sheepdog ..."
+    time.sleep(WAIT_TIME)
 
     sheep_head = SHEEP[0]
 
@@ -175,8 +278,8 @@ def start_sheep_cluster():
     e_command = "service tgtd start"
     cmd = "docker exec %s %s" % (sheep_head["name"], e_command)
     local(cmd, capture=True)
-    print "wait tgtd ..."
-    time.sleep(3)
+    print "wait for tgtd ..."
+    time.sleep(WAIT_TIME)
 
     # execute cluster format in sheepdog cluster
     print "execute cluster format in sheepdog cluster"
@@ -210,33 +313,58 @@ def start_sheep_cluster():
     local(cmd, capture=True)
 
 
+def start_postgres():
+    cmd = "docker exec %s %s/%s > /dev/null 2>&1 &" % (POS1["name"], SHARE_POS_DIR, PG_STARTUP_FILE)
+    local(cmd, capture=True)
+
+
 def check_posdog_environment():
-    env_exists = False
-    if check_bridge() or check_container() or check_share_dir():
-        env_exists = True
-    return env_exists
+    r_iscsi = check_iscsi_session()
+    if r_iscsi[0] is False:
+        return r_iscsi
+    r_container = check_container()
+    if r_container[0] is False:
+        return r_container
+    r_share = check_share_dir()
+    if r_share[0] is False:
+        return r_share
+    r_bridge = check_bridge()
+    if r_bridge[0] is False:
+        return r_bridge
+    r_check = (True, "")
+    return r_check
 
 
 def create_posdog_environment():
-
     # initial environment for postgres and sheepdog
-    if check_posdog_environment():
-        return False
-    # create share directory
+
+    r_check = check_posdog_environment()
+    if r_check[0] is False:
+        return r_check
+
     make_share_dir()
-    # create bridge
+    make_mnt_dir_for_postgres()
     create_bridge()
     # run sheepdog on docker container
     for sheepdog in SHEEP:
         run_container(sheepdog)
-    # run postgres on docker container
-    postgres = POS[0]
-    run_container(postgres)
 
     # start sheepdog cluster
     start_sheep_cluster()
 
-    return True
+    # mount disk on sheepdog vdi
+    r_mnt = mount_dick_on_sheepdog_vdi()
+    if r_mnt[0] is False:
+        return r_mnt
+    # run postgres on docker container
+    postgres = POS[0]
+    run_container(postgres)
+
+    # start postgres service
+    make_pg_startup_file()
+    start_postgres()
+    r_create = (True, "")
+    return r_create
 
 
 def destroy_posdog_environment():
@@ -246,9 +374,16 @@ def destroy_posdog_environment():
         for pos in POS:
             if pos["name"] == container_name:
                 stop_container(container_name)
+
+    umount_dick_on_sheepdog_vdi()
+    disconnect_iscsi_session()
+
+    for container in containers:
+        container_name = container.split()[-1]
         for sheep in SHEEP:
             if sheep["name"] == container_name:
                 stop_container(container_name)
-    destroy_bridge()
     delete_share_dir()
+    destroy_bridge()
+
 
