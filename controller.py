@@ -5,7 +5,7 @@ from fabric.api import local
 BRIDGE1 = {"name": "br0", "idx": "1", "addr": "10.0.10.254", "mask": "/24"}
 BRIDGE2 = {"name": "br1", "idx": "2", "addr": "10.0.11.254", "mask": "/24"}
 POS1 = {"name": "postgres1", "addr": "10.0.10.1", "image": "nhanaue/postgres"}
-POS2 = {"name": "postgres2", "addr": "10.0.10.2", "image": "nhanaue/postgres"}
+POS2 = {"name": "monitor", "addr": "10.0.10.2", "image": "nhanaue/postgres"}
 SHEEP1 = {"name": "sheepdog1", "addr": "10.0.10.11", "addr_b": "10.0.11.11", "image": "nhanaue/sheepdog"}
 SHEEP2 = {"name": "sheepdog2", "addr": "10.0.10.12", "addr_b": "10.0.11.12", "image": "nhanaue/sheepdog"}
 SHEEP3 = {"name": "sheepdog3", "addr": "10.0.10.13", "addr_b": "10.0.11.12", "image": "nhanaue/sheepdog"}
@@ -60,9 +60,9 @@ def check_bridge():
     for bridge in BRIDGE:
         sysfs_name = "/sys/class/net/" + bridge["name"]
         if os.path.exists(sysfs_name):
-            r_bridge = (False, "ERROR: bridge is already settings.")
+            r_bridge = (False, "bridge is already settings.")
             return r_bridge
-    r_bridge = (True, "")
+    r_bridge = (True, "bridge is not settings.")
     return r_bridge
 
 
@@ -99,13 +99,13 @@ def check_container():
         container_name = container.split()[-1]
         for pos in POS:
             if pos["name"] == container_name:
-                r_container = (False, "ERROR: posgres container is already exists.")
+                r_container = (False, "posgres container is already exists.")
                 return r_container
         for sheep in SHEEP:
             if sheep["name"] == container_name:
-                r_container = (False, "ERROR: sheepdog container is already exists.")
+                r_container = (False, "sheepdog container is already exists.")
                 return r_container
-    r_container = (True, None)
+    r_container = (True, "sheepdog container is not exists.")
     return r_container
 
 
@@ -143,12 +143,12 @@ def check_share_dir():
     for sheep in SHEEP:
         dir = "%s/%s" % (SHARE_SHEEP_DIR, sheep["name"])
         if os.path.exists(dir):
-            r_dir = (False, "ERROR: shared sheepdog dir is already exists")
+            r_dir = (False, "shared sheepdog dir is already exists.")
             return r_dir
     if os.path.exists(SHARE_POS_DIR):
-        r_dir = (False, "ERROR: shared postgres dir is already exists")
+        r_dir = (False, "shared postgres dir is already exists.")
         return r_dir
-    r_dir = (True, "")
+    r_dir = (True, "shared postgres dir is not exists.")
     return r_dir
 
 
@@ -176,9 +176,9 @@ def check_iscsi_session():
     sessions = local(cmd, capture=True)
 
     if target_vdi in sessions:
-        connected = (False, "Error iscsi sessions this already connected.")
+        connected = (False, "iscsi sessions this already connected.")
         return connected
-    connected = (True, "")
+    connected = (True, "iscsi sessions this not connected.")
     return connected
 
 
@@ -209,7 +209,7 @@ def check_device():
 def make_filesystem():
     # check file system
     if check_device() is False:
-        err = "ERROR: not found device [ /dev/disk/by-path/~]"
+        err = "not found device [ /dev/disk/by-path/~]"
         r_make = (False, err)
         return r_make
     cmd = "echo `ls -l  /dev/disk/by-path/ip-* | awk -F'/' '{print $NF}'`"

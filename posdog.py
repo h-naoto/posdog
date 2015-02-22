@@ -1,5 +1,6 @@
-import control as cl
-from optparse import OptionParser, OptionValueError
+import controller as co
+import monitor as mo
+from optparse import OptionParser
 
 
 def op_parse():
@@ -8,7 +9,7 @@ def op_parse():
     parser.add_option(
         "-t", "--task",
         type="choice",
-        choices=["install", "create", "destroy"],
+        choices=["install", "create", "monitor", "destroy"],
         default="create",
         dest="task",
         help="meaningless option"
@@ -18,7 +19,7 @@ def op_parse():
 
 
 def main():
-    if cl.check_user() is False:
+    if co.check_user() is False:
         print "Please running in root."
         return
 
@@ -27,15 +28,18 @@ def main():
 
     task = options.task
     if task == "install":
-        cl.install_docker_and_tools()
+        co.install_docker_and_tools()
     elif task == "create":
-        r_create = cl.create_posdog_environment()
+        r_create = co.create_posdog_environment()
         if r_create[0] is False:
-            print r_create[1]
+            print "ERROR: %s" % r_create[1]
             print "execute [python posdog.py -t destroy] command."
-
+    elif task == "monitor":
+        r_create = mo.create_monitoring_environment()
+        if r_create[0]:
+            print "ERROR: %s" % r_create[1]
     elif task == "destroy":
-        cl.destroy_posdog_environment()
+        co.destroy_posdog_environment()
     else:
         print "invalid option"
 
