@@ -246,13 +246,7 @@ def umount_dick_on_sheepdog_vdi():
 
 
 def make_pg_startup_file():
-    buffer = '#!/bin/bash' + '\n'
-    buffer += 'mkdir /mnt/postgres/pg_data' + '\n'
-    buffer += 'chown postgres:postgres /mnt/postgres/pg_data' + '\n'
-    buffer += 'su -c "/usr/local/pgsql/bin/initdb -D /mnt/postgres/pg_data  --no-locale" postgres' + '\n'
-    buffer += 'su -c "/usr/local/pgsql/bin/pg_ctl start -D /mnt/postgres/pg_data  -w" postgres' + '\n'
-    buffer += 'exit'
-    cmd = "echo \'%s\' > %s/%s" % (buffer, SHARE_POS_DIR, PG_STARTUP_FILE)
+    cmd = "cp ./%s %s/" % (PG_STARTUP_FILE, SHARE_POS_DIR)
     local(cmd, capture=True)
     cmd = "chmod 755 %s/%s" % (SHARE_POS_DIR, PG_STARTUP_FILE)
     local(cmd, capture=True)
