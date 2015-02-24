@@ -315,7 +315,7 @@ def start_sheep_cluster():
 
 
 def start_postgres():
-    cmd = "docker exec %s %s/%s > /dev/null 2>&1 &" % (POS1["name"], SHARE_POS_DIR, PG_STARTUP_FILE)
+    cmd = "docker exec %s %s/%s > /mnt/postgres/startup.log 2>&1 &" % (POS1["name"], SHARE_POS_DIR, PG_STARTUP_FILE)
     local(cmd, capture=True)
 
 
@@ -338,7 +338,9 @@ def check_posdog_environment():
 
 def create_posdog_environment():
     # initial environment for postgres and sheepdog
-
+    print "####################################################################################"
+    print "###   Advance preparation of environment                                         ###"
+    print "####################################################################################"
     r_check = check_posdog_environment()
     if r_check[0] is False:
         return r_check
@@ -346,6 +348,10 @@ def create_posdog_environment():
     make_share_dir()
     make_mnt_dir_for_postgres()
     create_bridge()
+
+    print "####################################################################################"
+    print "###   Initialization of sheepdog cluster                                         ###"
+    print "####################################################################################"
     # run sheepdog on docker container
     for sheepdog in SHEEP:
         run_container(sheepdog)
@@ -353,6 +359,9 @@ def create_posdog_environment():
     # start sheepdog cluster
     start_sheep_cluster()
 
+    print "####################################################################################"
+    print "###   Initialization of Postgres                                                 ###"
+    print "####################################################################################"
     # mount disk on sheepdog vdi
     r_mnt = mount_dick_on_sheepdog_vdi()
     if r_mnt[0] is False:
