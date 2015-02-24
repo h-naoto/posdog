@@ -339,7 +339,7 @@ def check_posdog_environment():
 def create_posdog_environment():
     # initial environment for postgres and sheepdog
     print "####################################################################################"
-    print "###   Advance preparation of environment                                         ###"
+    print "###   Preparing the environment                                                  ###"
     print "####################################################################################"
     r_check = check_posdog_environment()
     if r_check[0] is False:
@@ -350,7 +350,7 @@ def create_posdog_environment():
     create_bridge()
 
     print "####################################################################################"
-    print "###   Initialization of sheepdog cluster                                         ###"
+    print "###   Build sheepdog cluster environment                                         ###"
     print "####################################################################################"
     # run sheepdog on docker container
     for sheepdog in SHEEP:
@@ -360,7 +360,7 @@ def create_posdog_environment():
     start_sheep_cluster()
 
     print "####################################################################################"
-    print "###   Initialization of Postgres                                                 ###"
+    print "###   Build postgres environment                                                 ###"
     print "####################################################################################"
     # mount disk on sheepdog vdi
     r_mnt = mount_dick_on_sheepdog_vdi()
@@ -378,6 +378,9 @@ def create_posdog_environment():
 
 
 def destroy_posdog_environment():
+    print "####################################################################################"
+    print "###   Initialization of environment                                              ###"
+    print "####################################################################################"
     containers = get_container()
     for container in containers:
         container_name = container.split()[-1]

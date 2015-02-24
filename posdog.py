@@ -9,7 +9,7 @@ def op_parse():
     parser.add_option(
         "-t", "--task",
         type="choice",
-        choices=["install", "create", "monitor", "destroy"],
+        choices=["install", "create", "recreate", "monitor", "destroy"],
         default="create",
         dest="task",
         help="meaningless option"
@@ -29,17 +29,28 @@ def main():
     task = options.task
     if task == "install":
         co.install_docker_and_tools()
+
     elif task == "create":
         r_create = co.create_posdog_environment()
         if r_create[0] is False:
             print "ERROR: %s" % r_create[1]
             print "execute [python posdog.py -t destroy] command."
+
+    elif task == "recreate":
+        co.destroy_posdog_environment()
+        r_create = co.create_posdog_environment()
+        if r_create[0] is False:
+            print "ERROR: %s" % r_create[1]
+            print "execute [python posdog.py -t destroy] command."
+
     elif task == "monitor":
         r_create = mo.create_monitoring_environment()
         if r_create[0]:
             print "ERROR: %s" % r_create[1]
+
     elif task == "destroy":
         co.destroy_posdog_environment()
+
     else:
         print "invalid option"
 

@@ -51,16 +51,24 @@ def restart_postgres():
 
 def monitor_postgres():
     while True:
-        cmd = 'docker exec monitor /usr/local/pgsql/bin/psql -h 10.0.10.1 -U postgres -c "select now()"'
-        pg_resp = local(cmd, capture=True)
-        if "1 row" in pg_resp:
-            print pg_resp
-        else:
+        cmd = "echo `ps ax | grep postgres: | grep -v grep`"
+        pg_state = local(cmd, capture=True)
+        if "postgres" not in pg_state:
             print "####################################################################################"
             print "###   Postgres process is dead and try to restart                                ###"
             print "####################################################################################"
-            print pg_resp
             restart_postgres()
+        else:
+            cmd = 'docker exec monitor /usr/local/pgsql/bin/psql -h 10.0.10.1 -U postgres -c "select now()"'
+            pg_resp = local(cmd, capture=True)
+            if "1 row" in pg_resp:
+                print pg_resp
+            else:
+                print "####################################################################################"
+                print "###   postgres is no response and try to restart                                ###"
+                print "####################################################################################"
+                print pg_resp
+                restart_postgres()
         time.sleep(co.WAIT_TIME)
 
 
