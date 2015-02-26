@@ -45,8 +45,8 @@ def restart_postgres():
     postgres = co.POS[0]
     co.run_container(postgres)
     # start postgres service
-    co.make_pg_startup_file()
-    co.start_postgres()
+    cmd = "docker exec postgres1 /mnt/postgres/pg_restartup.sh > /mnt/postgres/restartup.log 2>&1 &"
+    local(cmd, capture=True)
 
 
 def monitor_postgres():

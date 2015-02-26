@@ -16,6 +16,7 @@ SHEEP = [SHEEP1, SHEEP2, SHEEP3]
 VDI = {"name": "vdipos", "size": "10G"}
 SHARE_SHEEP_DIR = "/var/lib/sheepdog"
 SHARE_POS_DIR = "/mnt/postgres"
+PG_STARTUP_FILES = "*startup.sh"
 PG_STARTUP_FILE = "pg_startup.sh"
 WAIT_TIME = 3
 
@@ -245,10 +246,10 @@ def umount_dick_on_sheepdog_vdi():
         local(cmd, capture=True)
 
 
-def make_pg_startup_file():
-    cmd = "cp ./%s %s/" % (PG_STARTUP_FILE, SHARE_POS_DIR)
+def move_pg_startup_file():
+    cmd = "cp ./%s %s/" % (PG_STARTUP_FILES, SHARE_POS_DIR)
     local(cmd, capture=True)
-    cmd = "chmod 755 %s/%s" % (SHARE_POS_DIR, PG_STARTUP_FILE)
+    cmd = "chmod 755 %s/%s" % (SHARE_POS_DIR, PG_STARTUP_FILES)
     local(cmd, capture=True)
 
 
@@ -371,7 +372,7 @@ def create_posdog_environment():
     run_container(postgres)
 
     # start postgres service
-    make_pg_startup_file()
+    move_pg_startup_file()
     start_postgres()
     r_create = (True, "")
     return r_create
