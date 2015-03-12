@@ -2,18 +2,22 @@ Posdog
 ========================
 Posdog using postgreSQL and Sheepdog and docker
 All of postgreSQL and sheepdog process runs on docker, and postgreSQL to provide a database
+
 system to use a sheepdog Cluster.
 
 Preparation
 -----------
 Please set up Ubuntu 14.04 Server Edition,
+
 and use in a proxy-free environment
+
 
 Setup
 -----
 Execute the following commands on a python inside the virtual machine or physical machine:
 
 install the python packages and libraries required to run the test program
+
 and clone posdog repository.
 ```
 % sudo apt-get install python-pip
@@ -26,6 +30,7 @@ and clone posdog repository.
 
 
 This step installs other packages such as Docker container and generates some helper scripts
+
 needed by the posdog.
 ```
 % sudo python posdog.py -t install
@@ -58,18 +63,28 @@ After the script, postgreSQL and sheepdog of environment that runs on docker wou
 Options
 -----
  * use [ -t install  ]
+
    This option is install the packages required for posdog.
+
  * use [ -t create   ]
+
    This option is create the posdog environment.
+
  * use [ -t destroy  ]
+
    This option is destroy the posdog environment.
+
  * use [ -t recreate ]
+
    This option is recreate the posdog environment.
+
    once you create by breaking the environment again.
+
  * use [ -t monitor  ]
+
    This option is create container for monitoring postgreSQL process,
    and failover the postgresSQL.
-   
+
 
 Examples
 -----
